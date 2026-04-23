@@ -1,18 +1,23 @@
 import streamlit as st
 import pandas as pd
 
+# 1. Configuración de pantalla
 st.set_page_config(page_title="Gala de los 13", layout="wide")
 
+# 2. Base de datos temporal
 if 'db_resultados' not in st.session_state:
     st.session_state.db_resultados = pd.DataFrame(columns=['Ronda', 'Mesa', 'J_A1', 'J_A2', 'Pts_A', 'J_B1', 'J_B2', 'Pts_B'])
 
 st.title("🏆 Gala de los 13: Sistema de Arbitraje")
 
-st.sidebar.header("Nombres de los Maestros")
+# 3. Nombres de Maestros
+st.sidebar.header("Registro de Maestros")
 nombres = {f"j{i}": st.sidebar.text_input(f"Maestro {i}", f"Jugador {i}") for i in range(1, 14)}
 
+# 4. Pestañas de Control
 menu = st.tabs(["🎮 Carga de Rondas", "📊 Tabla de Posiciones"])
 
+# 5. Matriz de Rotación
 def obtener_ronda(r):
     rondas = {
         1:  {"desc": "j13", "m1": ["j1", "j12", "j8", "j5"], "m2": ["j2", "j11", "j3", "j10"], "m3": ["j4", "j9", "j6", "j7"]},
@@ -31,12 +36,14 @@ def obtener_ronda(r):
     }
     return rondas.get(r)
 
+# PESTAÑA CARGA
 with menu[0]:
-    r_sel = st.select_slider("Ronda", options=list(range(1, 14)))
+    r_sel = st.select_slider("Seleccionar Ronda", options=list(range(1, 14)))
     d = obtener_ronda(r_sel)
-    st.info(f"Descansa: {nombres[d['desc']]}")
-    def mesa_ui(i, lj):
-        st.write(f"### MESA {i}")
+    st.info(f"🛋️ Descansa: {nombres[d['desc']]}")
+    
+    def ui_mesa(i, lj):
+        st.markdown(f"### MESA {i}")
         c1, c2 = st.columns(2)
         with c1:
             st.write(f"🔵 {nombres[lj[0]]} & {nombres[lj[1]]}")
@@ -45,17 +52,21 @@ with menu[0]:
             st.write(f"🔴 {nombres[lj[2]]} & {nombres[lj[3]]}")
             pb = st.number_input(f"Pts B - M{i}", 0, 200, key=f"b{r_sel}{i}")
         return [r_sel, i, lj[0], lj[1], pa, lj[2], lj[3], pb]
-    res = [mesa_ui(1, d["m1"]), mesa_ui(2, d["m2"]), mesa_ui(3, d["m3"])]
-    if st.button("💾 GUARDAR RESULTADOS"):
-        df_n = pd.DataFrame(res, columns=['Ronda', 'Mesa', 'J_A1', 'J_A2', 'Pts_A', 'J_B1', 'J_B2', 'Pts_B'])
-        st.session_state.db_resultados = pd.concat([st.session_state.db_resultados, df_n]).drop_duplicates(subset=['Ronda', 'Mesa'], keep='last')
-        st.success("¡Resultados guardados!")
 
+    r1 = ui_mesa(1, d["m1"])
+    r2 = ui_mesa(2, d["m2"])
+    r3 = ui_mesa(3, d["m3"])
+
+    if st.button("💾 GUARDAR RESULTADOS"):
+        nuevos = pd.DataFrame([r1, r2, r3], columns=['Ronda', 'Mesa', 'J_A1', 'J_A2', 'Pts_A', 'J_B1', 'J_B2', 'Pts_B'])
+        st.session_state.db_resultados = pd.concat([st.session_state.db_resultados, nuevos]).drop_duplicates(subset=['Ronda', 'Mesa'], keep='last')
+        st.success("Resultados registrados.")
+
+# PESTAÑA TABLA
 with menu[1]:
     df = st.session_state.db_resultados
     if not df.empty:
-        st.header("Tabla de Posiciones (JG > DIF > PRO)")
-        s = []
+        stats = []
         for c, n in nombres.items():
             pa = df[(df['J_A1'] == c) | (df['J_A2'] == c)]
             pb = df[(df['J_B1'] == c) | (df['J_B2'] == c)]
@@ -63,6 +74,11 @@ with menu[1]:
             jg = len(pa[pa['Pts_A'] > pa['Pts_B']]) + len(pb[pb['Pts_B'] > pb['Pts_A']])
             pf = pa['Pts_A'].sum() + pb['Pts_B'].sum()
             pc = pa['Pts_B'].sum() + pb['Pts_A'].sum()
-            s.append([n, jj, jg, jj-jg, pf, pc, pf-pc, round(pf/jj, 2) if jj>0 else 0])
-        t = pd.DataFrame(s, columns=['Maestro', 'JJ', 'JG', 'JP', 'PF', 'PC', 'DIF', 'PRO'])
-        st.table(t.sort_values(by=['JG', 'DIF', 'PRO'], ascending=False).reset_index(drop=True))
+            stats.append([n, jj, jg, jj-jg, pf, pc, pf-pc, round(pf/jj, 2) if jj > 0 else 0])
+        
+        tabla = pd.DataFrame(stats, columns=['Maestro', 'JJ', 'JG', 'JP', 'PF', 'PC', 'DIF', 'PRO'])
+        tabla = tabla.sort_values(by=['JG', 'DIF', 'PRO'], ascending=False).reset_index(drop=True)
+        tabla.index += 1
+        st.table(tabla)
+    else:
+        st.write("Cargue datos para ver el Baremo.")
