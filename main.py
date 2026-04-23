@@ -4,7 +4,8 @@ import pandas as pd
 # --- CONFIGURACIÓN Y SEGURIDAD ---
 st.set_page_config(page_title="Gala de los 13", layout="wide")
 
-POETA_GUSTAVO = "maestro13" # <--- ESTA ES SU CONTRASEÑA. PUEDE CAMBIARLA.
+# CLAVE PERSONALIZADA
+CLAVE_MAESTRA = "poeta_gustavo" 
 
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
@@ -12,30 +13,30 @@ if 'autenticado' not in st.session_state:
 # --- PANTALLA DE ACCESO ---
 if not st.session_state.autenticado:
     st.title("🔒 Acceso Privado: Gala de los 13")
-    clave = st.text_input("Introduzca la Clave de Arbitraje:", type="password")
+    
+    # El sistema limpia espacios y convierte a minúsculas para comparar
+    input_clave = st.text_input("Introduzca la Clave de Arbitraje:", type="password")
+    
     if st.button("Entrar"):
-        if clave == CLAVE_MAESTRA:
+        if input_clave.lower().strip() == CLAVE_MAESTRA:
             st.session_state.autenticado = True
             st.rerun()
         else:
-            st.error("Clave incorrecta. Consulte al Administrador.")
+            st.error("Clave incorrecta. Recuerde usar el guion bajo ( _ )")
     st.stop()
 
-# --- SI ESTÁ AUTENTICADO, EMPIEZA EL PROGRAMA ---
+# --- PROGRAMA PRINCIPAL (MEMORIA ACTIVA) ---
 
-# Base de datos compartida (Simulada para la sesión)
 if 'db_resultados' not in st.session_state:
     st.session_state.db_resultados = pd.DataFrame(columns=['Ronda', 'Mesa', 'J_A1', 'J_A2', 'Pts_A', 'J_B1', 'J_B2', 'Pts_B'])
 
 st.title("🏆 Gala de los 13: Sistema de Arbitraje")
 
-# Panel Lateral de Nombres
 st.sidebar.header("Registro de Maestros")
 nombres = {f"j{i}": st.sidebar.text_input(f"Maestro {i}", f"Jugador {i}") for i in range(1, 14)}
 
 menu = st.tabs(["🎮 Carga de Rondas", "📊 Tabla de Posiciones"])
 
-# Matriz de Rotación
 def obtener_ronda(r):
     rondas = {
         1:  {"desc": "j13", "m1": ["j1", "j12", "j8", "j5"], "m2": ["j2", "j11", "j3", "j10"], "m3": ["j4", "j9", "j6", "j7"]},
@@ -71,13 +72,12 @@ with menu[0]:
         c1, c2 = st.columns(2)
         p_actual_a = obtener_puntos(r_sel, i, 'A')
         p_actual_b = obtener_puntos(r_sel, i, 'B')
-        
         with c1:
             st.write(f"🔵 {nombres[lj[0]]} & {nombres[lj[1]]}")
             pa = st.number_input(f"Pts A - M{i}", 0, 200, value=p_actual_a, key=f"a{r_sel}{i}")
         with c2:
             st.write(f"🔴 {nombres[lj[2]]} & {nombres[lj[3]]}")
-            pb = st.number_input(f"Pts B - M{i}", 0, 200, key=f"b{r_sel}{i}")
+            pb = st.number_input(f"Pts B - M{i}", 0, 200, value=p_actual_b, key=f"b{r_sel}{i}")
         return [r_sel, i, lj[0], lj[1], pa, lj[2], lj[3], pb]
 
     r1 = ui_mesa(1, d["m1"])
