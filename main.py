@@ -1,18 +1,19 @@
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(page_title="Gala de los 13", layout="wide")
 
-st.title("🏆 Gala Final: Los 13 Maestros")
-st.subheader("Sistema de Rotación Oficial (Matriz Excel)")
+if 'db_resultados' not in st.session_state:
+    st.session_state.db_resultados = pd.DataFrame(columns=['Ronda', 'Mesa', 'J_A1', 'J_A2', 'Pts_A', 'J_B1', 'J_B2', 'Pts_B'])
 
-# Registro de Nombres en la barra lateral
-st.sidebar.header("Nombres de los Clasificados")
-nombres = {}
-for i in range(1, 14):
-    nombres[f"j{i}"] = st.sidebar.text_input(f"Maestro {i}", f"Jugador {i}")
+st.title("🏆 Gala de los 13: Sistema de Arbitraje")
 
-# MATRIZ EXACTA DE TU EXCEL
-def obtener_ronda_oficial(r_num):
+st.sidebar.header("Nombres de los Maestros")
+nombres = {f"j{i}": st.sidebar.text_input(f"Maestro {i}", f"Jugador {i}") for i in range(1, 14)}
+
+menu = st.tabs(["🎮 Carga de Rondas", "📊 Tabla de Posiciones"])
+
+def obtener_ronda(r):
     rondas = {
         1:  {"desc": "j13", "m1": ["j1", "j12", "j8", "j5"], "m2": ["j2", "j11", "j3", "j10"], "m3": ["j4", "j9", "j6", "j7"]},
         2:  {"desc": "j1",  "m1": ["j2", "j13", "j9", "j6"], "m2": ["j3", "j12", "j4", "j11"], "m3": ["j5", "j10", "j7", "j8"]},
@@ -28,20 +29,40 @@ def obtener_ronda_oficial(r_num):
         12: {"desc": "j11", "m1": ["j12", "j10", "j6", "j3"], "m2": ["j13", "j9", "j1", "j8"], "m3": ["j2", "j7", "j4", "j5"]},
         13: {"desc": "j12", "m1": ["j13", "j11", "j7", "j4"], "m2": ["j1", "j10", "j2", "j9"], "m3": ["j3", "j8", "j5", "j6"]},
     }
-    return rondas.get(r_num)
+    return rondas.get(r)
 
-ronda_sel = st.select_slider("Selecciona la Ronda", options=list(range(1, 14)))
-datos = obtener_ronda_oficial(ronda_sel)
+with menu[0]:
+    r_sel = st.select_slider("Ronda", options=list(range(1, 14)))
+    d = obtener_ronda(r_sel)
+    st.info(f"Descansa: {nombres[d['desc']]}")
+    def mesa_ui(i, lj):
+        st.write(f"### MESA {i}")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write(f"🔵 {nombres[lj[0]]} & {nombres[lj[1]]}")
+            pa = st.number_input(f"Pts A - M{i}", 0, 200, key=f"a{r_sel}{i}")
+        with c2:
+            st.write(f"🔴 {nombres[lj[2]]} & {nombres[lj[3]]}")
+            pb = st.number_input(f"Pts B - M{i}", 0, 200, key=f"b{r_sel}{i}")
+        return [r_sel, i, lj[0], lj[1], pa, lj[2], lj[3], pb]
+    res = [mesa_ui(1, d["m1"]), mesa_ui(2, d["m2"]), mesa_ui(3, d["m3"])]
+    if st.button("💾 GUARDAR RESULTADOS"):
+        df_n = pd.DataFrame(res, columns=['Ronda', 'Mesa', 'J_A1', 'J_A2', 'Pts_A', 'J_B1', 'J_B2', 'Pts_B'])
+        st.session_state.db_resultados = pd.concat([st.session_state.db_resultados, df_n]).drop_duplicates(subset=['Ronda', 'Mesa'], keep='last')
+        st.success("¡Resultados guardados!")
 
-st.info(f"🛋️ **En la Ronda {ronda_sel} descansa:** {nombres[datos['desc']]}")
-
-def mostrar_mesa(titulo, lista_j):
-    st.markdown(f"### {titulo}")
-    st.write(f"**Pareja A:** {nombres[lista_j[0]]} y {nombres[lista_j[1]]}")
-    st.write(f"**vs**")
-    st.write(f"**Pareja B:** {nombres[lista_j[2]]} y {nombres[lista_j[3]]}")
-
-col1, col2, col3 = st.columns(3)
-with col1: mostrar_mesa("MESA 1", datos["m1"])
-with col2: mostrar_mesa("MESA 2", datos["m2"])
-with col3: mostrar_mesa("MESA 3", datos["m3"])
+with menu[1]:
+    df = st.session_state.db_resultados
+    if not df.empty:
+        st.header("Tabla de Posiciones (JG > DIF > PRO)")
+        s = []
+        for c, n in nombres.items():
+            pa = df[(df['J_A1'] == c) | (df['J_A2'] == c)]
+            pb = df[(df['J_B1'] == c) | (df['J_B2'] == c)]
+            jj = len(pa) + len(pb)
+            jg = len(pa[pa['Pts_A'] > pa['Pts_B']]) + len(pb[pb['Pts_B'] > pb['Pts_A']])
+            pf = pa['Pts_A'].sum() + pb['Pts_B'].sum()
+            pc = pa['Pts_B'].sum() + pb['Pts_A'].sum()
+            s.append([n, jj, jg, jj-jg, pf, pc, pf-pc, round(pf/jj, 2) if jj>0 else 0])
+        t = pd.DataFrame(s, columns=['Maestro', 'JJ', 'JG', 'JP', 'PF', 'PC', 'DIF', 'PRO'])
+        st.table(t.sort_values(by=['JG', 'DIF', 'PRO'], ascending=False).reset_index(drop=True))
